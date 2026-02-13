@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "173916852372",
+    "project_id": "college-club-app-90306",
+    "storage_bucket": "college-club-app-90306.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:173916852372:android:237ceb1098ec3c07f32481",
+        "android_client_info": {
+          "package_name": "com.example.club_hub"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDNB4FqpCdH0mEFogysgcpe2bU0OmKL_0E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
