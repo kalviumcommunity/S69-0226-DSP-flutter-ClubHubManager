@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'add_event_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -7,22 +8,28 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Club Hub Dashboard"),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-              // This takes you back to the login page
-              Navigator.of(context).pop();
-            },
-          )
-        ],
+      appBar: AppBar(title: const Text("Club Hub Events")),
+      // This button opens the Add Event page
+      floatingActionButton: FloatingActionButton(
+        child: const Icon(Icons.add),
+        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AddEventScreen())),
       ),
-      body: const Center(
-        child: Text("Welcome to the College Club App!", 
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+      // This part reads data from Firebase in REAL TIME
+      body: StreamBuilder(
+        stream: FirebaseFirestore.instance.collection('events').orderBy('timestamp', descending: true).snapshots(),
+        builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          
+          return ListView(
+            children: snapshot.data!.docs.map((doc) {
+              return ListTile(
+                title: Text(doc['title']),
+                subtitle: Text(doc['description']),
+                trailing: const Icon(Icons.event),
+              );
+            }).toList(),
+          );
+        },
       ),
     );
   }
