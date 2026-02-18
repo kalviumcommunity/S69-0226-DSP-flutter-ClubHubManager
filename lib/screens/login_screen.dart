@@ -41,7 +41,7 @@ class _LoginScreenState extends State<LoginScreen> {
       
       // THIS IS THE NEW PART: Move to Home Screen
       if (mounted) {
-        Navigator.push(
+        Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const HomeScreen()),
         );
