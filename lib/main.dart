@@ -24,6 +24,11 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        primarySwatch: Colors.indigo, // Professional college blue
+        useMaterial3: true,           // Modern Android look
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+      ),
       // This "Stream" automatically switches between Login and Home
       home: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class AddEventScreen extends StatefulWidget {
   const AddEventScreen({super.key});
@@ -12,17 +13,20 @@ class _AddEventScreenState extends State<AddEventScreen> {
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
 
+  // Find the _saveEvent function and update the Firebase part:
   Future<void> _saveEvent() async {
     if (_titleController.text.isEmpty || _descController.text.isEmpty) return;
 
-    // This sends the data to your Firebase "Events" collection
+    final userEmail = FirebaseAuth.instance.currentUser?.email ?? "Unknown";
+
     await FirebaseFirestore.instance.collection('events').add({
       'title': _titleController.text,
       'description': _descController.text,
+      'postedBy': userEmail, // <--- Add this line
       'timestamp': FieldValue.serverTimestamp(),
     });
 
-    if (mounted) Navigator.pop(context); // Go back after saving
+    if (mounted) Navigator.pop(context);
   }
 
   @override
