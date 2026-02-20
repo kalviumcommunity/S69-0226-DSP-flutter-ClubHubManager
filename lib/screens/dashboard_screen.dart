@@ -12,20 +12,71 @@ class DashboardScreen extends StatelessWidget {
       // This button opens the Add Event page
       floatingActionButton: FloatingActionButton(
         child: const Icon(Icons.add),
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AddEventScreen())),
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const AddEventScreen()),
+        ),
       ),
       // This part reads data from Firebase in REAL TIME
       body: StreamBuilder(
-        stream: FirebaseFirestore.instance.collection('events').orderBy('timestamp', descending: true).snapshots(),
+        stream: FirebaseFirestore.instance
+            .collection('events')
+            .orderBy('timestamp', descending: true)
+            .snapshots(),
         builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-          
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
           return ListView(
             children: snapshot.data!.docs.map((doc) {
-              return ListTile(
-                title: Text(doc['title']),
-                subtitle: Text(doc['description']),
-                trailing: const Icon(Icons.event),
+              return Dismissible(
+                key: Key(doc.id),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  color: Colors.red,
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: const Icon(Icons.delete, color: Colors.white),
+                ),
+                onDismissed: (direction) {
+                  // This line deletes the document from Firebase!
+                  FirebaseFirestore.instance
+                      .collection('events')
+                      .doc(doc.id)
+                      .delete();
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Event deleted")),
+                  );
+                },
+                child: Card(
+                  margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+                  child: ListTile(
+                    title: Text(
+                      doc['title'],
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(doc['description']),
+                        const SizedBox(height: 5),
+                        // Replace that crashing line with this:
+                      Text(
+                          "By: ${doc.data().toString().contains('postedBy') ? doc['postedBy'] : 'Anonymous'}",
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                            color: Colors.blueGrey,
+                          ),
+                        ),
+                      ],
+                    ),
+                    isThreeLine: true,
+                    trailing: const Icon(Icons.chevron_right),
+                  ),
+                ),
               );
             }).toList(),
           );
