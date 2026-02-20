@@ -24,8 +24,21 @@ class DashboardScreen extends StatelessWidget {
             .orderBy('timestamp', descending: true)
             .snapshots(),
         builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          
+          // NEW: If there are no events, show a friendly message
+          if (snapshot.data!.docs.isEmpty) {
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.event_busy, size: 80, color: Colors.grey),
+                  SizedBox(height: 10),
+                  Text("No events yet. Be the first to post!", 
+                       style: TextStyle(color: Colors.grey, fontSize: 18)),
+                ],
+              ),
+            );
           }
 
           return ListView(
