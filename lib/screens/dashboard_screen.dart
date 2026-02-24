@@ -6,7 +6,7 @@ import 'add_event_screen.dart';
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
-  // 1. DEFINE YOUR ADMINS HERE
+  // 1. ADD YOUR EMAILS HERE
   final List<String> adminEmails = const [
     "test@college.com", 
     "test2@college.com"
@@ -21,29 +21,34 @@ class DashboardScreen extends StatelessWidget {
           .collection('registrations')
           .doc(userEmail)
           .set({'email': userEmail, 'registeredAt': FieldValue.serverTimestamp()});
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Registered!")));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Registered!")));
     }
   }
 
-  // 2. FUNCTION TO SHOW ATTENDANCE (ONLY FOR ADMINS)
+  // SHOW ATTENDANCE LIST
   void _showAttendance(BuildContext context, String eventId) {
     showModalBottomSheet(
       context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) {
         return StreamBuilder(
           stream: FirebaseFirestore.instance.collection('events').doc(eventId).collection('registrations').snapshots(),
           builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
             if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-            return ListView(
+            return Column(
               children: [
                 const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Text("Registered Attendees", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  padding: EdgeInsets.all(20.0),
+                  child: Text("Attendance List", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                 ),
-                ...snapshot.data!.docs.map((doc) => ListTile(
-                  leading: const Icon(Icons.person),
-                  title: Text(doc['email']),
-                )),
+                Expanded(
+                  child: ListView(
+                    children: snapshot.data!.docs.map((doc) => ListTile(
+                      leading: const Icon(Icons.check_circle, color: Colors.green),
+                      title: Text(doc['email']),
+                    )).toList(),
+                  ),
+                ),
               ],
             );
           },
@@ -52,15 +57,46 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
+  // EDIT EVENT LOGIC
+  void _editEvent(BuildContext context, DocumentSnapshot doc) {
+    TextEditingController titleEdit = TextEditingController(text: doc['title']);
+    TextEditingController descEdit = TextEditingController(text: doc['description']);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Edit Event"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: titleEdit, decoration: const InputDecoration(labelText: "Title")),
+            TextField(controller: descEdit, decoration: const InputDecoration(labelText: "Description")),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () {
+              FirebaseFirestore.instance.collection('events').doc(doc.id).update({
+                'title': titleEdit.text,
+                'description': descEdit.text,
+              });
+              Navigator.pop(context);
+            },
+            child: const Text("Update"),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUserEmail = FirebaseAuth.instance.currentUser?.email;
-    // Check if current user is an admin
     final bool isAdmin = adminEmails.contains(currentUserEmail);
 
     return Scaffold(
       appBar: AppBar(title: const Text("Club Hub Events")),
-      // 3. ONLY SHOW ADD BUTTON IF ADMIN
       floatingActionButton: isAdmin 
         ? FloatingActionButton(
             child: const Icon(Icons.add),
@@ -75,28 +111,38 @@ class DashboardScreen extends StatelessWidget {
           return ListView(
             children: snapshot.data!.docs.map((doc) {
               Widget cardContent = Card(
-                margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+                margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                 child: ListTile(
-                  title: Text(doc['title'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text(doc['description']),
-                  trailing: StreamBuilder<DocumentSnapshot>(
-                    stream: FirebaseFirestore.instance.collection('events').doc(doc.id).collection('registrations').doc(currentUserEmail).snapshots(),
-                    builder: (context, regSnapshot) {
-                      bool isRegistered = regSnapshot.hasData && regSnapshot.data!.exists;
-                      
-                      return ElevatedButton(
-                        onPressed: isRegistered 
-                            ? (isAdmin ? () => _showAttendance(context, doc.id) : null) // Admin can click to see list
-                            : () => _registerForEvent(context, doc.id, doc['title']),
-                        style: ElevatedButton.styleFrom(backgroundColor: isRegistered ? Colors.green.shade100 : null),
-                        child: Text(isRegistered ? (isAdmin ? "View List" : "Registered") : "Join"),
-                      );
-                    },
+                  title: Row(
+                    children: [
+                      Expanded(child: Text(doc['title'], style: const TextStyle(fontWeight: FontWeight.bold))),
+                      if (isAdmin) 
+                        IconButton(
+                          icon: const Icon(Icons.edit, size: 20, color: Colors.blue),
+                          onPressed: () => _editEvent(context, doc),
+                        ),
+                    ],
                   ),
+                  subtitle: Text(doc['description']),
+                  trailing: isAdmin 
+                    ? ElevatedButton(
+                        onPressed: () => _showAttendance(context, doc.id),
+                        child: const Text("View List"),
+                      )
+                    : StreamBuilder<DocumentSnapshot>(
+                        stream: FirebaseFirestore.instance.collection('events').doc(doc.id).collection('registrations').doc(currentUserEmail).snapshots(),
+                        builder: (context, regSnapshot) {
+                          bool isRegistered = regSnapshot.hasData && regSnapshot.data!.exists;
+                          return ElevatedButton(
+                            onPressed: isRegistered ? null : () => _registerForEvent(context, doc.id, doc['title']),
+                            style: ElevatedButton.styleFrom(backgroundColor: isRegistered ? Colors.green.shade100 : null),
+                            child: Text(isRegistered ? "Registered" : "Join"),
+                          );
+                        },
+                      ),
                 ),
               );
 
-              // 4. ONLY ALLOW SWIPE TO DELETE IF ADMIN
               if (isAdmin) {
                 return Dismissible(
                   key: Key(doc.id),
