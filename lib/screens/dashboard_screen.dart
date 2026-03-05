@@ -6,7 +6,7 @@ import 'add_event_screen.dart';
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
-  // 1. UPDATED ADMIN EMAILS
+  // 1. ADMIN EMAILS
   final List<String> adminEmails = const [
     "test@college.com", 
     "test2@college.com"
@@ -22,14 +22,29 @@ class DashboardScreen extends StatelessWidget {
           .doc(userEmail)
           .set({
             'email': userEmail, 
-            'status': 'Registered', // Default status
+            'status': 'Registered', 
             'registeredAt': FieldValue.serverTimestamp()
           });
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Registered!")));
     }
   }
 
-  // UPDATED ATTENDANCE LIST WITH PRESENT/ABSENT BUTTONS
+  // --- ADMIN: FINALIZE EVENT LOGIC ---
+  Future<void> _finalizeEvent(String eventId, String newStatus) async {
+    final eventRef = FirebaseFirestore.instance.collection('events').doc(eventId);
+    
+    // 1. Update the event status itself
+    await eventRef.update({'eventStatus': newStatus});
+
+    // 2. If completed, mark all remaining "Registered" people as "Absent"
+    if (newStatus == 'Completed') {
+      final regs = await eventRef.collection('registrations').where('status', isEqualTo: 'Registered').get();
+      for (var doc in regs.docs) {
+        await doc.reference.update({'status': 'Absent'});
+      }
+    }
+  }
+
   void _showAttendance(BuildContext context, String eventId) {
     showModalBottomSheet(
       context: context,
@@ -37,7 +52,7 @@ class DashboardScreen extends StatelessWidget {
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) {
         return SizedBox(
-          height: MediaQuery.of(context).size.height * 0.7,
+          height: MediaQuery.of(context).size.height * 0.8,
           child: StreamBuilder(
             stream: FirebaseFirestore.instance.collection('events').doc(eventId).collection('registrations').snapshots(),
             builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
@@ -46,7 +61,7 @@ class DashboardScreen extends StatelessWidget {
                 children: [
                   const Padding(
                     padding: EdgeInsets.all(20.0),
-                    child: Text("Mark Attendance", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    child: Text("Attendance & Event Control", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                   ),
                   Expanded(
                     child: ListView(
@@ -54,24 +69,47 @@ class DashboardScreen extends StatelessWidget {
                         String status = doc.data().toString().contains('status') ? doc['status'] : 'Registered';
                         return ListTile(
                           title: Text(doc['email']),
-                          subtitle: Text("Status: $status", style: TextStyle(color: status == 'Present' ? Colors.green : (status == 'Absent' ? Colors.red : Colors.grey))),
+                          subtitle: Text("Status: $status"),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              IconButton(
-                                icon: const Icon(Icons.check_circle, color: Colors.green),
-                                onPressed: () => doc.reference.update({'status': 'Present'}),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.cancel, color: Colors.red),
-                                onPressed: () => doc.reference.update({'status': 'Absent'}),
-                              ),
+                              IconButton(icon: const Icon(Icons.check_circle, color: Colors.green), onPressed: () => doc.reference.update({'status': 'Present'})),
+                              IconButton(icon: const Icon(Icons.cancel, color: Colors.red), onPressed: () => doc.reference.update({'status': 'Absent'})),
                             ],
                           ),
                         );
                       }).toList(),
                     ),
                   ),
+                  const Divider(),
+                  // --- THE NEW ACTION BUTTONS AT THE BOTTOM ---
+                  Padding(
+                    padding: const EdgeInsets.all(15.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            _finalizeEvent(eventId, 'Cancelled');
+                            Navigator.pop(context);
+                          },
+                          icon: const Icon(Icons.block),
+                          label: const Text("Cancel Event"),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade100, foregroundColor: Colors.red),
+                        ),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            _finalizeEvent(eventId, 'Completed');
+                            Navigator.pop(context);
+                          },
+                          icon: const Icon(Icons.done_all),
+                          label: const Text("Finish Event"),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade100, foregroundColor: Colors.green),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
                 ],
               );
             },
@@ -81,7 +119,6 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  // EDIT EVENT LOGIC
   void _editEvent(BuildContext context, DocumentSnapshot doc) {
     TextEditingController titleEdit = TextEditingController(text: doc['title']);
     TextEditingController descEdit = TextEditingController(text: doc['description']);
@@ -121,49 +158,46 @@ class DashboardScreen extends StatelessWidget {
           
           return ListView(
             children: snapshot.data!.docs.map((doc) {
-              Widget cardContent = Card(
-                margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                child: ListTile(
-                  title: Row(children: [
-                    Expanded(child: Text(doc['title'], style: const TextStyle(fontWeight: FontWeight.bold))),
-                    if (isAdmin) IconButton(icon: const Icon(Icons.edit, size: 20, color: Colors.blue), onPressed: () => _editEvent(context, doc)),
-                  ]),
-                  subtitle: Text(doc['description']),
-                  trailing: isAdmin 
-                    ? ElevatedButton(onPressed: () => _showAttendance(context, doc.id), child: const Text("View List"))
-                    : StreamBuilder<DocumentSnapshot>(
-                        stream: FirebaseFirestore.instance.collection('events').doc(doc.id).collection('registrations').doc(currentUserEmail).snapshots(),
-                        builder: (context, regSnapshot) {
-                          if (!regSnapshot.hasData || !regSnapshot.data!.exists) {
-                            return ElevatedButton(
-                              onPressed: () => _registerForEvent(context, doc.id, doc['title']),
-                              child: const Text("Join"),
-                            );
-                          }
-                          // IF REGISTERED, SHOW STATUS
-                          String status = regSnapshot.data!.data().toString().contains('status') ? regSnapshot.data!['status'] : 'Registered';
-                          return ElevatedButton(
-                            onPressed: null, // Always disabled once registered
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: status == 'Present' ? Colors.green.shade100 : (status == 'Absent' ? Colors.red.shade100 : Colors.blue.shade50),
-                            ),
-                            child: Text(status, style: TextStyle(color: status == 'Present' ? Colors.green : (status == 'Absent' ? Colors.red : Colors.blue))),
-                          );
-                        },
-                      ),
+              // Get Event Status (Active, Cancelled, Completed)
+              String eventStatus = doc.data().toString().contains('eventStatus') ? doc['eventStatus'] : 'Active';
+
+              return Dismissible(
+                key: Key(doc.id),
+                direction: isAdmin ? DismissDirection.endToStart : DismissDirection.none,
+                background: Container(color: Colors.red, alignment: Alignment.centerRight, padding: const EdgeInsets.symmetric(horizontal: 20), child: const Icon(Icons.delete, color: Colors.white)),
+                onDismissed: (direction) => FirebaseFirestore.instance.collection('events').doc(doc.id).delete(),
+                child: Card(
+                  margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                  child: ListTile(
+                    title: Row(children: [
+                      Expanded(child: Text(doc['title'], style: const TextStyle(fontWeight: FontWeight.bold))),
+                      if (isAdmin) IconButton(icon: const Icon(Icons.edit, size: 20, color: Colors.blue), onPressed: () => _editEvent(context, doc)),
+                    ]),
+                    subtitle: Text(doc['description']),
+                    trailing: (eventStatus == 'Cancelled')
+                      ? const Text("CANCELLED", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))
+                      : isAdmin 
+                        ? ElevatedButton(onPressed: () => _showAttendance(context, doc.id), child: const Text("View List"))
+                        : StreamBuilder<DocumentSnapshot>(
+                            stream: FirebaseFirestore.instance.collection('events').doc(doc.id).collection('registrations').doc(currentUserEmail).snapshots(),
+                            builder: (context, regSnapshot) {
+                              if (!regSnapshot.hasData || !regSnapshot.data!.exists) {
+                                return ElevatedButton(
+                                  onPressed: (eventStatus == 'Completed') ? null : () => _registerForEvent(context, doc.id, doc['title']),
+                                  child: Text(eventStatus == 'Completed' ? "Ended" : "Join"),
+                                );
+                              }
+                              String status = regSnapshot.data!.data().toString().contains('status') ? regSnapshot.data!['status'] : 'Registered';
+                              return ElevatedButton(
+                                onPressed: null, 
+                                style: ElevatedButton.styleFrom(backgroundColor: status == 'Present' ? Colors.green.shade100 : (status == 'Absent' ? Colors.red.shade100 : Colors.blue.shade50)),
+                                child: Text(status, style: TextStyle(color: status == 'Present' ? Colors.green : (status == 'Absent' ? Colors.red : Colors.blue))),
+                              );
+                            },
+                          ),
+                  ),
                 ),
               );
-
-              if (isAdmin) {
-                return Dismissible(
-                  key: Key(doc.id),
-                  direction: DismissDirection.endToStart,
-                  background: Container(color: Colors.red, alignment: Alignment.centerRight, padding: const EdgeInsets.symmetric(horizontal: 20), child: const Icon(Icons.delete, color: Colors.white)),
-                  onDismissed: (direction) => FirebaseFirestore.instance.collection('events').doc(doc.id).delete(),
-                  child: cardContent,
-                );
-              }
-              return cardContent;
             }).toList(),
           );
         },
