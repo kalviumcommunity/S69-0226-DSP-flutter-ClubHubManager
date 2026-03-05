@@ -6,7 +6,7 @@ import 'add_event_screen.dart';
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
-  // 1. ADD YOUR EMAILS HERE
+  // 1. UPDATED ADMIN EMAILS
   final List<String> adminEmails = const [
     "test@college.com", 
     "test2@college.com"
@@ -20,38 +20,62 @@ class DashboardScreen extends StatelessWidget {
           .doc(eventId)
           .collection('registrations')
           .doc(userEmail)
-          .set({'email': userEmail, 'registeredAt': FieldValue.serverTimestamp()});
+          .set({
+            'email': userEmail, 
+            'status': 'Registered', // Default status
+            'registeredAt': FieldValue.serverTimestamp()
+          });
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Registered!")));
     }
   }
 
-  // SHOW ATTENDANCE LIST
+  // UPDATED ATTENDANCE LIST WITH PRESENT/ABSENT BUTTONS
   void _showAttendance(BuildContext context, String eventId) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) {
-        return StreamBuilder(
-          stream: FirebaseFirestore.instance.collection('events').doc(eventId).collection('registrations').snapshots(),
-          builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
-            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-            return Column(
-              children: [
-                const Padding(
-                  padding: EdgeInsets.all(20.0),
-                  child: Text("Attendance List", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                ),
-                Expanded(
-                  child: ListView(
-                    children: snapshot.data!.docs.map((doc) => ListTile(
-                      leading: const Icon(Icons.check_circle, color: Colors.green),
-                      title: Text(doc['email']),
-                    )).toList(),
+        return SizedBox(
+          height: MediaQuery.of(context).size.height * 0.7,
+          child: StreamBuilder(
+            stream: FirebaseFirestore.instance.collection('events').doc(eventId).collection('registrations').snapshots(),
+            builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
+              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+              return Column(
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.all(20.0),
+                    child: Text("Mark Attendance", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                   ),
-                ),
-              ],
-            );
-          },
+                  Expanded(
+                    child: ListView(
+                      children: snapshot.data!.docs.map((doc) {
+                        String status = doc.data().toString().contains('status') ? doc['status'] : 'Registered';
+                        return ListTile(
+                          title: Text(doc['email']),
+                          subtitle: Text("Status: $status", style: TextStyle(color: status == 'Present' ? Colors.green : (status == 'Absent' ? Colors.red : Colors.grey))),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.check_circle, color: Colors.green),
+                                onPressed: () => doc.reference.update({'status': 'Present'}),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.cancel, color: Colors.red),
+                                onPressed: () => doc.reference.update({'status': 'Absent'}),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         );
       },
     );
@@ -61,30 +85,20 @@ class DashboardScreen extends StatelessWidget {
   void _editEvent(BuildContext context, DocumentSnapshot doc) {
     TextEditingController titleEdit = TextEditingController(text: doc['title']);
     TextEditingController descEdit = TextEditingController(text: doc['description']);
-
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Edit Event"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: titleEdit, decoration: const InputDecoration(labelText: "Title")),
-            TextField(controller: descEdit, decoration: const InputDecoration(labelText: "Description")),
-          ],
-        ),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: titleEdit, decoration: const InputDecoration(labelText: "Title")),
+          TextField(controller: descEdit, decoration: const InputDecoration(labelText: "Description")),
+        ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-          ElevatedButton(
-            onPressed: () {
-              FirebaseFirestore.instance.collection('events').doc(doc.id).update({
-                'title': titleEdit.text,
-                'description': descEdit.text,
-              });
-              Navigator.pop(context);
-            },
-            child: const Text("Update"),
-          ),
+          ElevatedButton(onPressed: () {
+            FirebaseFirestore.instance.collection('events').doc(doc.id).update({'title': titleEdit.text, 'description': descEdit.text});
+            Navigator.pop(context);
+          }, child: const Text("Update")),
         ],
       ),
     );
@@ -98,10 +112,7 @@ class DashboardScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text("Club Hub Events")),
       floatingActionButton: isAdmin 
-        ? FloatingActionButton(
-            child: const Icon(Icons.add),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AddEventScreen())),
-          )
+        ? FloatingActionButton(child: const Icon(Icons.add), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AddEventScreen())))
         : null,
       body: StreamBuilder(
         stream: FirebaseFirestore.instance.collection('events').orderBy('timestamp', descending: true).snapshots(),
@@ -113,30 +124,30 @@ class DashboardScreen extends StatelessWidget {
               Widget cardContent = Card(
                 margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                 child: ListTile(
-                  title: Row(
-                    children: [
-                      Expanded(child: Text(doc['title'], style: const TextStyle(fontWeight: FontWeight.bold))),
-                      if (isAdmin) 
-                        IconButton(
-                          icon: const Icon(Icons.edit, size: 20, color: Colors.blue),
-                          onPressed: () => _editEvent(context, doc),
-                        ),
-                    ],
-                  ),
+                  title: Row(children: [
+                    Expanded(child: Text(doc['title'], style: const TextStyle(fontWeight: FontWeight.bold))),
+                    if (isAdmin) IconButton(icon: const Icon(Icons.edit, size: 20, color: Colors.blue), onPressed: () => _editEvent(context, doc)),
+                  ]),
                   subtitle: Text(doc['description']),
                   trailing: isAdmin 
-                    ? ElevatedButton(
-                        onPressed: () => _showAttendance(context, doc.id),
-                        child: const Text("View List"),
-                      )
+                    ? ElevatedButton(onPressed: () => _showAttendance(context, doc.id), child: const Text("View List"))
                     : StreamBuilder<DocumentSnapshot>(
                         stream: FirebaseFirestore.instance.collection('events').doc(doc.id).collection('registrations').doc(currentUserEmail).snapshots(),
                         builder: (context, regSnapshot) {
-                          bool isRegistered = regSnapshot.hasData && regSnapshot.data!.exists;
+                          if (!regSnapshot.hasData || !regSnapshot.data!.exists) {
+                            return ElevatedButton(
+                              onPressed: () => _registerForEvent(context, doc.id, doc['title']),
+                              child: const Text("Join"),
+                            );
+                          }
+                          // IF REGISTERED, SHOW STATUS
+                          String status = regSnapshot.data!.data().toString().contains('status') ? regSnapshot.data!['status'] : 'Registered';
                           return ElevatedButton(
-                            onPressed: isRegistered ? null : () => _registerForEvent(context, doc.id, doc['title']),
-                            style: ElevatedButton.styleFrom(backgroundColor: isRegistered ? Colors.green.shade100 : null),
-                            child: Text(isRegistered ? "Registered" : "Join"),
+                            onPressed: null, // Always disabled once registered
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: status == 'Present' ? Colors.green.shade100 : (status == 'Absent' ? Colors.red.shade100 : Colors.blue.shade50),
+                            ),
+                            child: Text(status, style: TextStyle(color: status == 'Present' ? Colors.green : (status == 'Absent' ? Colors.red : Colors.blue))),
                           );
                         },
                       ),
