@@ -29,14 +29,10 @@ class DashboardScreen extends StatelessWidget {
     }
   }
 
-  // --- ADMIN: FINALIZE EVENT LOGIC ---
   Future<void> _finalizeEvent(String eventId, String newStatus) async {
     final eventRef = FirebaseFirestore.instance.collection('events').doc(eventId);
-    
-    // 1. Update the event status itself
     await eventRef.update({'eventStatus': newStatus});
 
-    // 2. If completed, mark all remaining "Registered" people as "Absent"
     if (newStatus == 'Completed') {
       final regs = await eventRef.collection('registrations').where('status', isEqualTo: 'Registered').get();
       for (var doc in regs.docs) {
@@ -82,7 +78,6 @@ class DashboardScreen extends StatelessWidget {
                     ),
                   ),
                   const Divider(),
-                  // --- THE NEW ACTION BUTTONS AT THE BOTTOM ---
                   Padding(
                     padding: const EdgeInsets.all(15.0),
                     child: Row(
@@ -152,14 +147,19 @@ class DashboardScreen extends StatelessWidget {
         ? FloatingActionButton(child: const Icon(Icons.add), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AddEventScreen())))
         : null,
       body: StreamBuilder(
-        stream: FirebaseFirestore.instance.collection('events').orderBy('timestamp', descending: true).snapshots(),
+        // NEW: Sorts by eventDate so the soonest event is at the top
+        stream: FirebaseFirestore.instance
+            .collection('events')
+            .orderBy('eventDate', descending: false) 
+            .snapshots(),
         builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
           
           return ListView(
             children: snapshot.data!.docs.map((doc) {
-              // Get Event Status (Active, Cancelled, Completed)
               String eventStatus = doc.data().toString().contains('eventStatus') ? doc['eventStatus'] : 'Active';
+              // Check if date exists to avoid errors with old data
+              String dateLabel = doc.data().toString().contains('dateString') ? doc['dateString'] : "TBD";
 
               return Dismissible(
                 key: Key(doc.id),
@@ -173,7 +173,14 @@ class DashboardScreen extends StatelessWidget {
                       Expanded(child: Text(doc['title'], style: const TextStyle(fontWeight: FontWeight.bold))),
                       if (isAdmin) IconButton(icon: const Icon(Icons.edit, size: 20, color: Colors.blue), onPressed: () => _editEvent(context, doc)),
                     ]),
-                    subtitle: Text(doc['description']),
+                    // UPDATED: Shows the event date above the description
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("Date: $dateLabel", style: const TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold, fontSize: 13)),
+                        Text(doc['description']),
+                      ],
+                    ),
                     trailing: (eventStatus == 'Cancelled')
                       ? const Text("CANCELLED", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))
                       : isAdmin 
